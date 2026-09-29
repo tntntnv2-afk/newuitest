@@ -633,6 +633,36 @@ function Library:CreateWindow(cfg)
 			l.Visible = true
 		end
 		local GuiService = game:GetService("GuiService")
+		local cards = setmetatable({}, { __mode = "k" })
+		local function watch(d) if d:IsA("Frame") and d:GetAttribute("BaseAlpha") ~= nil then cards[d] = true end end
+		for _, d in ipairs(main:GetDescendants()) do watch(d) end
+		self:GiveSignal(main.DescendantAdded:Connect(watch))
+		local rects, rectsAt = {}, 0
+		local function shown(g)
+			while g and g ~= main do
+				if g:IsA("GuiObject") and not g.Visible then return false end
+				g = g.Parent
+			end
+			return g == main
+		end
+		local function buildRects()
+			rects = {}
+			local o = layer.AbsolutePosition
+			for c in pairs(cards) do
+				if c.Parent and shown(c) then
+					local p, z = c.AbsolutePosition - o, c.AbsoluteSize
+					if z.X > 0 and z.Y > 0 then rects[#rects + 1] = { p.X - 6, p.Y - 6, p.X + z.X + 6, p.Y + z.Y + 6 } end
+				end
+			end
+		end
+		local box = { 170, 70, 600, 400 }
+		local function covered(x, y)
+			if x < box[1] or y < box[2] or x > box[3] or y > box[4] then return true end
+			for _, r in ipairs(rects) do
+				if x >= r[1] and x <= r[3] and y >= r[2] and y <= r[4] then return true end
+			end
+			return false
+		end
 		local t, sweep = 0, 0
 		self:GiveSignal(RunService.RenderStepped:Connect(LPH_NO_VIRTUALIZE(function(dt)
 			if Library.Unloaded or not main.Visible then return end
@@ -643,6 +673,20 @@ function Library:CreateWindow(cfg)
 			if not ScreenGui.IgnoreGuiInset then m = m - GuiService:GetGuiInset() end
 			m = m - layer.AbsolutePosition
 			local mouseIn = m.X >= 0 and m.Y >= 0 and m.X <= W and m.Y <= H
+			if t - rectsAt > 0.2 then rectsAt = t buildRects() end
+			local bodyF = main:FindFirstChild("Body")
+			if bodyF then
+				local bp, bz = bodyF.AbsolutePosition - layer.AbsolutePosition, bodyF.AbsoluteSize
+				box[1], box[2], box[3], box[4] = bp.X + 12, bp.Y + 8, bp.X + bz.X - 14, bp.Y + bz.Y - 10
+				if not nodes.placed and box[3] > box[1] and box[4] > box[2] then
+					nodes.placed = true
+					for _, n in ipairs(nodes) do
+						n.x = box[1] + math.random() * (box[3] - box[1])
+						n.y = box[2] + math.random() * (box[4] - box[2])
+					end
+				end
+			end
+			if mouseIn and covered(m.X, m.Y) then mouseIn = false end
 			local accent = Library.Theme.Accent
 			for _, n in ipairs(nodes) do
 				if mouseIn then
@@ -657,9 +701,11 @@ function Library:CreateWindow(cfg)
 				if sp > 22 then n.vx, n.vy = n.vx / sp * 22, n.vy / sp * 22 end
 				n.x = n.x + n.vx * dt
 				n.y = n.y + n.vy * dt
-				if n.x < 0 then n.x, n.vx = 0, math.abs(n.vx) elseif n.x > W then n.x, n.vx = W, -math.abs(n.vx) end
-				if n.y < 0 then n.y, n.vy = 0, math.abs(n.vy) elseif n.y > H then n.y, n.vy = H, -math.abs(n.vy) end
+				if n.x < box[1] then n.x, n.vx = box[1], math.abs(n.vx) elseif n.x > box[3] then n.x, n.vx = box[3], -math.abs(n.vx) end
+				if n.y < box[2] then n.y, n.vy = box[2], math.abs(n.vy) elseif n.y > box[4] then n.y, n.vy = box[4], -math.abs(n.vy) end
 				n.f.Position = UDim2.fromOffset(n.x, n.y)
+				n.hid = covered(n.x, n.y)
+				n.f.Visible = not n.hid
 				n.f.BackgroundTransparency = 0.25 + 0.3 * (0.5 + 0.5 * math.sin(t * 1.3 + n.ph))
 			end
 			local used = 0
@@ -669,15 +715,18 @@ function Library:CreateWindow(cfg)
 					local b = nodes[j]
 					local dx, dy = b.x - a.x, b.y - a.y
 					local d2 = dx * dx + dy * dy
-					if d2 < LINK * LINK then
+					if d2 < LINK * LINK and not a.hid and not b.hid
+						and not covered(a.x + dx * 0.25, a.y + dy * 0.25)
+						and not covered(a.x + dx * 0.5, a.y + dy * 0.5)
+						and not covered(a.x + dx * 0.75, a.y + dy * 0.75) then
 						used = used + 1
 						place(lineAt(used), a.x, a.y, b.x, b.y, 0.72 + 0.28 * (math.sqrt(d2) / LINK), accent)
 					end
 				end
-				if mouseIn then
+				if mouseIn and not a.hid then
 					local dx, dy = m.X - a.x, m.Y - a.y
 					local d = math.sqrt(dx * dx + dy * dy)
-					if d < MOUSE_LINK then
+					if d < MOUSE_LINK and not covered((a.x + m.X) * 0.5, (a.y + m.Y) * 0.5) then
 						used = used + 1
 						place(lineAt(used), a.x, a.y, m.X, m.Y, 0.55 + 0.45 * (d / MOUSE_LINK), Color3.new(1, 1, 1))
 					end
@@ -938,7 +987,7 @@ function Library:CreateWindow(cfg)
 		task.delay(0.25, function() if searchIn.Text == "" then results.Visible = false end end)
 	end)
 
-	local body = Create("Frame", { Size = UDim2.new(1, -RAIL, 1, -(HEAD + FOOT + 6)), Position = UDim2.new(0, RAIL, 0, HEAD + 6), BackgroundTransparency = 1, ZIndex = 11, Parent = main })
+	local body = Create("Frame", { Name = "Body", Size = UDim2.new(1, -RAIL, 1, -(HEAD + FOOT + 6)), Position = UDim2.new(0, RAIL, 0, HEAD + 6), BackgroundTransparency = 1, ZIndex = 11, Parent = main })
 	local footer = Create("Frame", { Size = UDim2.new(1, -RAIL, 0, FOOT), Position = UDim2.new(0, RAIL, 1, -FOOT), BackgroundTransparency = 1, ZIndex = 12, Parent = main })
 	local footL = Text(footer, cfg.Footer or "", 10, false, "FontDim"); footL.Position = UDim2.new(0, 20, 0, -2); footL.Size = UDim2.new(0.45, -20, 1, 0); footL.ZIndex = 13
 
