@@ -1,4 +1,3 @@
-
 local cloneref = cloneref or function(x) return x end
 local Players = cloneref(game:GetService("Players"))
 local TweenService = cloneref(game:GetService("TweenService"))
@@ -17,40 +16,30 @@ pcall(function()
 	getgenv().Options = Library.Options
 end)
 
-local Settings = {
-	Accent = { 214, 40, 48 }, Design = "Default", Glass = true, Blur = false, DarkBackground = false,
-	Snow = false, Light = false, MenuKey = "Insert", Avatar = "",
-}
+local Settings = { Accent = { 214, 40, 48 }, MenuKey = "Insert" }
 Library.Settings = Settings
 
-local Palettes = {
-	Dark = {
-		Window = Color3.fromRGB(13, 13, 16), Sidebar = Color3.fromRGB(18, 18, 22), Card = Color3.fromRGB(21, 21, 26),
-		Control = Color3.fromRGB(34, 34, 41), Hover = Color3.fromRGB(28, 28, 34), Stroke = Color3.fromRGB(38, 38, 45),
-		Text = Color3.fromRGB(236, 236, 240), SubText = Color3.fromRGB(150, 150, 160), Muted = Color3.fromRGB(92, 92, 104),
-		Knob = Color3.fromRGB(120, 120, 130), Shadow = Color3.fromRGB(0, 0, 0),
-	},
-	Light = {
-		Window = Color3.fromRGB(244, 244, 247), Sidebar = Color3.fromRGB(236, 236, 241), Card = Color3.fromRGB(252, 252, 254),
-		Control = Color3.fromRGB(222, 222, 229), Hover = Color3.fromRGB(228, 228, 235), Stroke = Color3.fromRGB(214, 214, 222),
-		Text = Color3.fromRGB(24, 24, 30), SubText = Color3.fromRGB(96, 96, 108), Muted = Color3.fromRGB(150, 150, 162),
-		Knob = Color3.fromRGB(170, 170, 180), Shadow = Color3.fromRGB(80, 80, 90),
-	},
+local Palette = {
+	Window = Color3.fromRGB(9, 9, 12), Sidebar = Color3.fromRGB(255, 255, 255), Card = Color3.fromRGB(255, 255, 255),
+	Control = Color3.fromRGB(255, 255, 255), Hover = Color3.fromRGB(255, 255, 255), Stroke = Color3.fromRGB(255, 255, 255),
+	Popover = Color3.fromRGB(17, 17, 21), Switch = Color3.fromRGB(62, 62, 70), Knob = Color3.fromRGB(165, 165, 175),
+	Text = Color3.fromRGB(238, 238, 242), SubText = Color3.fromRGB(158, 158, 168), Muted = Color3.fromRGB(104, 104, 116),
 }
-
+local Alpha = { Window = 0.3, Sidebar = 0.965, Card = 0.968, Control = 0.935, Hover = 0.93, Stroke = 0.915, Popover = 0.04 }
 local function F(weight) return Font.new("rbxasset://fonts/families/BuilderSans.json", weight or Enum.FontWeight.Regular) end
 local FONT, FONT_M, FONT_SB, FONT_B = F(), F(Enum.FontWeight.Medium), F(Enum.FontWeight.SemiBold), F(Enum.FontWeight.Bold)
 
 local function accent() return Color3.fromRGB(Settings.Accent[1], Settings.Accent[2], Settings.Accent[3]) end
 local function col(key)
 	if key == "Accent" then return accent() end
-	return (Settings.Light and Palettes.Light or Palettes.Dark)[key]
+	return Palette[key]
 end
 
 local Registry = {}
 local function reg(o, prop, key)
 	Registry[#Registry + 1] = { o, prop, key }
 	o[prop] = col(key)
+	if prop == "BackgroundColor3" and Alpha[key] and o.BackgroundTransparency == 0 then o.BackgroundTransparency = Alpha[key] end
 	return o
 end
 
@@ -62,7 +51,7 @@ local function new(class, props, parent)
 end
 local function corner(o, r) return new("UICorner", { CornerRadius = UDim.new(0, r or 6) }, o) end
 local function stroke(o, key, tr)
-	local s = new("UIStroke", { Thickness = 1, Transparency = tr or 0, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, o)
+	local s = new("UIStroke", { Thickness = 1, Transparency = tr or Alpha.Stroke, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, o)
 	reg(s, "Color", key or "Stroke")
 	return s
 end
@@ -158,17 +147,34 @@ pcall(function() Gui.Parent = (gethui and gethui()) or cloneref(game:GetService(
 if not Gui.Parent then Gui.Parent = LocalPlayer:WaitForChild("PlayerGui") end
 Library.ScreenGui = Gui
 
-local Dim = new("Frame", { Size = UDim2.fromScale(1, 1), BackgroundColor3 = Color3.new(0, 0, 0), BackgroundTransparency = 1, ZIndex = 1, Visible = true }, Gui)
-local SnowLayer = new("Frame", { Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, ZIndex = 2 }, Gui)
 local Overlay = new("Frame", { Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, ZIndex = 200 }, Gui)
 local Catcher = button(Overlay, { Size = UDim2.fromScale(1, 1), Visible = false, ZIndex = 200 })
 
-local Blur = nil
-local function blurOn(on)
-	if on and not Blur then Blur = new("BlurEffect", { Name = "DexoriBlur", Size = 0 }, Lighting) end
-	if Blur then tween(Blur, { Size = on and 14 or 0 }, 0.25) end
+local GlassDOF = nil
+local function glassBehind(frame, inset, isOn)
+	if not GlassDOF then
+		GlassDOF = new("DepthOfFieldEffect", { Name = "DexoriGlass", FarIntensity = 0, FocusDistance = 51.6, InFocusRadius = 50, NearIntensity = 1, Enabled = false }, Lighting)
+	end
+	local part = new("Part", { Name = "DexoriGlass", Color = Color3.new(0, 0, 0), Material = Enum.Material.Glass, Size = Vector3.new(1, 1, 0), Anchored = true, CanCollide = false, CanQuery = false, CanTouch = false, CastShadow = false, Transparency = 1 })
+	local mesh = new("SpecialMesh", { MeshType = Enum.MeshType.Brick, Offset = Vector3.new(0, 0, -0.000001) }, part)
+	conn(RunService.RenderStepped, function()
+		local cam = workspace.CurrentCamera
+		local show = cam and frame.Parent and frame.Visible and (isOn == nil or isOn()) and not Library.Unloaded
+		if not show then part.Transparency = 1 return end
+		if part.Parent ~= cam then part.Parent = cam end
+		local pos, size = frame.AbsolutePosition, frame.AbsoluteSize
+		local i = inset or 0
+		local function at(x, y) local r = cam:ViewportPointToRay(x, y) return r.Origin + r.Direction * 0.001 end
+		local tl = at(pos.X + i, pos.Y + i)
+		local tr = at(pos.X + size.X - i, pos.Y + i)
+		local br = at(pos.X + size.X - i, pos.Y + size.Y - i)
+		part.CFrame = CFrame.fromMatrix((tl + br) / 2, cam.CFrame.XVector, cam.CFrame.YVector, cam.CFrame.ZVector)
+		mesh.Scale = Vector3.new((tr - tl).Magnitude, (br - tr).Magnitude, 0)
+		part.Transparency = 0.98
+	end)
+	Library:OnUnload(function() part:Destroy() end)
+	return part
 end
-
 local function closePopover()
 	local p = Library._popover
 	Library._popover = nil
@@ -202,7 +208,7 @@ local function openPopover(pop, anchor, side)
 end
 local function makePopover(width)
 	local p = new("CanvasGroup", { Size = UDim2.fromOffset(width or 240, 0), AutomaticSize = Enum.AutomaticSize.Y, Visible = false, ZIndex = 210, GroupTransparency = 1 }, Overlay)
-	reg(p, "BackgroundColor3", "Card")
+	reg(p, "BackgroundColor3", "Popover")
 	corner(p, 10)
 	stroke(p)
 	pad(p, 6)
@@ -239,7 +245,7 @@ local function tooltip(target, tip)
 	local tt
 	conn(target.MouseEnter, function()
 		tt = new("TextLabel", { AutomaticSize = Enum.AutomaticSize.XY, Text = tip, TextSize = 12, FontFace = FONT, ZIndex = 250, BackgroundTransparency = 0.05 }, Overlay)
-		reg(tt, "BackgroundColor3", "Card")
+		reg(tt, "BackgroundColor3", "Popover")
 		reg(tt, "TextColor3", "SubText")
 		corner(tt, 6)
 		stroke(tt)
@@ -267,7 +273,7 @@ local function makeSwitch(parent, getOn)
 	local function paint(anim)
 		local on = getOn()
 		local pos = on and UDim2.fromOffset(17, 3) or UDim2.fromOffset(3, 3)
-		local bg = on and col("Accent") or col("Control")
+		local bg = on and col("Accent") or col("Switch")
 		local kc = on and Color3.new(1, 1, 1) or col("Knob")
 		if anim then tween(knob, { Position = pos, BackgroundColor3 = kc }, 0.16) tween(sw, { BackgroundColor3 = bg }, 0.16)
 		else knob.Position, knob.BackgroundColor3, sw.BackgroundColor3 = pos, kc, bg end
@@ -412,11 +418,11 @@ function Section:AddDropdown(idx, cfg)
 		for i, v in ipairs(o.Values) do
 			if q == "" or string.find(string.lower(tostring(v)), q, 1, true) then
 				n = n + 1
-				local b = button(scroll, { Size = UDim2.new(1, 0, 0, 28), LayoutOrder = i, BackgroundTransparency = isSel(v) and 0 or 1 })
+				local b = button(scroll, { Size = UDim2.new(1, 0, 0, 28), LayoutOrder = i, BackgroundTransparency = isSel(v) and 0.9 or 1 })
 				reg(b, "BackgroundColor3", "Hover")
 				corner(b, 6)
 				local t = text(b, tostring(v), 13, isSel(v) and "Accent" or "Text", FONT, { Position = UDim2.fromOffset(10, 0), Size = UDim2.new(1, -20, 1, 0) })
-				conn(b.MouseEnter, function() if not isSel(v) then tween(b, { BackgroundTransparency = 0.4 }, 0.1) end end)
+				conn(b.MouseEnter, function() if not isSel(v) then tween(b, { BackgroundTransparency = 0.94 }, 0.1) end end)
 				conn(b.MouseLeave, function() if not isSel(v) then tween(b, { BackgroundTransparency = 1 }, 0.1) end end)
 				conn(b.MouseButton1Click, function()
 					if o.Multi then
@@ -510,12 +516,11 @@ function Section:AddButton(a, b)
 	local btn = button(row, { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.new(1, -24, 0, 28), Text = cfg.Text or "Button", TextSize = 13, FontFace = FONT_M })
 	reg(btn, "BackgroundColor3", "Control")
 	reg(btn, "TextColor3", "Text")
-	btn.BackgroundTransparency = 0
 	corner(btn, 6)
 	stroke(btn)
 	local armed = false
-	conn(btn.MouseEnter, function() tween(btn, { BackgroundColor3 = col("Hover") }, 0.1) end)
-	conn(btn.MouseLeave, function() tween(btn, { BackgroundColor3 = col("Control") }, 0.1) end)
+	conn(btn.MouseEnter, function() tween(btn, { BackgroundTransparency = 0.88 }, 0.1) end)
+	conn(btn.MouseLeave, function() tween(btn, { BackgroundTransparency = Alpha.Control }, 0.1) end)
 	conn(btn.MouseButton1Click, function()
 		if cfg.DoubleClick and not armed then
 			armed = true
@@ -811,8 +816,6 @@ function Page:_section(colIdx, name)
 	if name and name ~= "" then text(holder, string.upper(name), 12, "Muted", FONT_M, { Size = UDim2.new(1, 0, 0, 14), LayoutOrder = 1 }) end
 	local body = new("Frame", { Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, LayoutOrder = 2 }, holder)
 	reg(body, "BackgroundColor3", "Card")
-	body.BackgroundTransparency = Settings.Glass and 0.25 or 0
-	table.insert(Library._refresh, function() body.BackgroundTransparency = Settings.Glass and 0.25 or 0 end)
 	corner(body, 8)
 	stroke(body)
 	list(body, 0)
@@ -831,7 +834,7 @@ function Library:Notify(a, b)
 		self._notifyHolder = h
 	end
 	local card = new("CanvasGroup", { Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, GroupTransparency = 1, ZIndex = 181 }, self._notifyHolder)
-	reg(card, "BackgroundColor3", "Card")
+	reg(card, "BackgroundColor3", "Popover")
 	corner(card, 10)
 	stroke(card)
 	pad(card, 10, 12, 10, 16)
@@ -870,10 +873,6 @@ local function makeDraggable(handle, target)
 end
 
 local function avatarImage()
-	if Settings.Avatar and Settings.Avatar ~= "" then
-		local id = string.match(tostring(Settings.Avatar), "%d+")
-		if id then return "rbxassetid://" .. id end
-	end
 	return "rbxthumb://type=AvatarHeadShot&id=" .. LocalPlayer.UserId .. "&w=150&h=150"
 end
 
@@ -931,40 +930,6 @@ local function buildStats()
 	return pill
 end
 
-local function buildKeybinds()
-	local frame = new("Frame", { AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -16, 0, 220), Size = UDim2.fromOffset(160, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, Visible = false, ZIndex = 150 }, Gui)
-	list(frame, 6)
-	local head = new("Frame", { Size = UDim2.fromOffset(104, 26), LayoutOrder = 0, ZIndex = 150 }, frame)
-	reg(head, "BackgroundColor3", "Window")
-	head.BackgroundTransparency = 0.12
-	corner(head, 8)
-	stroke(head)
-	text(head, "Hotkeys", 13, "Text", FONT_SB, { Size = UDim2.fromScale(1, 1), TextXAlignment = Enum.TextXAlignment.Center, ZIndex = 151 })
-	makeDraggable(head, frame)
-	local rows = new("Frame", { Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, LayoutOrder = 1 }, frame)
-	list(rows, 5)
-	Library._keysRefresh = function()
-		for _, c in ipairs(rows:GetChildren()) do if c:IsA("Frame") then c:Destroy() end end
-		for i, k in ipairs(Library.Keybinds) do
-			if k.Value ~= nil and (k.Frame and k.Frame.Parent) then
-				local r = new("Frame", { Size = UDim2.fromOffset(0, 22), AutomaticSize = Enum.AutomaticSize.X, BackgroundTransparency = 1, LayoutOrder = i }, rows)
-				local ll = list(r, 5, Enum.FillDirection.Horizontal)
-				ll.VerticalAlignment = Enum.VerticalAlignment.Center
-				local on = k:GetState()
-				for j, s in ipairs({ keyName(k.Value), k.Text }) do
-					local chip = new("TextLabel", { Size = UDim2.fromOffset(0, 22), AutomaticSize = Enum.AutomaticSize.X, Text = s, TextSize = 12, FontFace = FONT_SB, LayoutOrder = j, ZIndex = 151 }, r)
-					reg(chip, "BackgroundColor3", on and j == 2 and "Accent" or "Window")
-					reg(chip, "TextColor3", on and j == 2 and "Text" or "SubText")
-					chip.BackgroundTransparency = on and j == 2 and 0.2 or 0.12
-					corner(chip, 6)
-					pad(chip, 0, 7)
-				end
-			end
-		end
-	end
-	return frame
-end
-
 local function buildArray()
 	local frame = new("Frame", { AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -12, 0, 12), Size = UDim2.fromOffset(240, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, Visible = false, ZIndex = 140 }, Gui)
 	local l = list(frame, 2)
@@ -988,32 +953,6 @@ local function buildArray()
 end
 function Library:SetArrayList(on) if self._array then self._array.Visible = on and true or false if on then self._arrayRefresh() end end end
 
-local Snow = { flakes = {}, on = false }
-local function snowStep(dt)
-	if not Snow.on then return end
-	local vs = Gui.AbsoluteSize
-	for _, f in ipairs(Snow.flakes) do
-		f.y = f.y + f.speed * dt
-		f.x = f.x + math.sin(os.clock() * f.sway + f.phase) * 12 * dt
-		if f.y > vs.Y + 10 then f.y = -10 f.x = math.random() * vs.X end
-		f.ui.Position = UDim2.fromOffset(f.x, f.y)
-	end
-end
-local function setSnow(on)
-	Snow.on = on
-	if on and #Snow.flakes == 0 then
-		local vs = Gui.AbsoluteSize
-		for _ = 1, 70 do
-			local sz = math.random(2, 4)
-			local ui = new("Frame", { Size = UDim2.fromOffset(sz, sz), BackgroundColor3 = Color3.new(1, 1, 1), BackgroundTransparency = math.random() * 0.4 + 0.2, BorderSizePixel = 0 }, SnowLayer)
-			corner(ui, sz)
-			Snow.flakes[#Snow.flakes + 1] = { ui = ui, x = math.random() * vs.X, y = math.random() * vs.Y, speed = math.random(25, 70), sway = math.random() * 2 + 0.5, phase = math.random() * 6 }
-		end
-	end
-	SnowLayer.Visible = on
-end
-conn(RunService.RenderStepped, snowStep)
-
 function Library:CreateWindow(cfg)
 	cfg = cfg or {}
 	loadSettings()
@@ -1021,23 +960,18 @@ function Library:CreateWindow(cfg)
 	local W, H = 860, 640
 	if typeof(cfg.Size) == "UDim2" then W, H = cfg.Size.X.Offset, cfg.Size.Y.Offset end
 	local win = { Tabs = {}, _nav = {}, _order = 0 }
-	local root = new("CanvasGroup", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(W, H), ZIndex = 10 }, Gui)
+	local root = new("CanvasGroup", { Position = UDim2.new(0.5, -W / 2, 0.5, -H / 2), Size = UDim2.fromOffset(W, H), ZIndex = 10 }, Gui)
 	reg(root, "BackgroundColor3", "Window")
 	corner(root, 12)
-	local rs = stroke(root)
-	rs.Transparency = 0.2
+	stroke(root, "Stroke", 0.88)
 	local scale = new("UIScale", { Scale = 1 }, root)
-	local grad = new("UIGradient", { Rotation = 90, Transparency = NumberSequence.new(0, 0.06) }, root)
-	local _ = grad
-	local function glass() root.BackgroundTransparency = Settings.Glass and 0.08 or 0 end
-	table.insert(Library._refresh, glass)
-	glass()
+	new("UIGradient", { Rotation = 90, Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(1, 0.12) }) }, root)
+	local sheen = new("Frame", { Size = UDim2.new(1, 0, 0, 1), Position = UDim2.fromOffset(0, 1), BackgroundColor3 = Color3.new(1, 1, 1), BackgroundTransparency = 0.86, BorderSizePixel = 0, ZIndex = 11 }, root)
+	new("UIGradient", { Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.5, 0), NumberSequenceKeypoint.new(1, 1) }) }, sheen)
+	glassBehind(root, 4, function() return root.Visible end)
 
 	local side = new("Frame", { Size = UDim2.new(0, 172, 1, 0), BorderSizePixel = 0 }, root)
 	reg(side, "BackgroundColor3", "Sidebar")
-	local function sideGlass() side.BackgroundTransparency = Settings.Glass and 0.25 or 0 end
-	table.insert(Library._refresh, sideGlass)
-	sideGlass()
 	local sline = new("Frame", { AnchorPoint = Vector2.new(1, 0), Position = UDim2.fromScale(1, 0), Size = UDim2.new(0, 1, 1, 0), BorderSizePixel = 0 }, side)
 	reg(sline, "BackgroundColor3", "Stroke")
 	local logoRow = new("Frame", { Size = UDim2.new(1, 0, 0, 58), BackgroundTransparency = 1 }, side)
@@ -1062,12 +996,12 @@ function Library:CreateWindow(cfg)
 	reg(uline, "BackgroundColor3", "Stroke")
 	local uav = new("ImageLabel", { Position = UDim2.fromOffset(8, 10), Size = UDim2.fromOffset(36, 36), BackgroundTransparency = 1, Image = avatarImage() }, ucard)
 	corner(uav, 18)
-	local uname = text(ucard, LocalPlayer.DisplayName, 13, "Text", FONT_M, { Position = UDim2.fromOffset(54, 11), Size = UDim2.new(1, -80, 0, 17) })
-	local usub = text(ucard, cfg.UserSubtitle or "Lifetime", 12, "SubText", FONT, { Position = UDim2.fromOffset(54, 28), Size = UDim2.new(1, -80, 0, 15) })
+	text(ucard, LocalPlayer.DisplayName, 13, "Text", FONT_M, { Position = UDim2.fromOffset(54, 11), Size = UDim2.new(1, -80, 0, 17) })
+	text(ucard, cfg.UserSubtitle or "Lifetime", 12, "SubText", FONT, { Position = UDim2.fromOffset(54, 28), Size = UDim2.new(1, -80, 0, 15) })
 	local uch = chevron(ucard, "right", 9)
 	uch.AnchorPoint = Vector2.new(1, 0.5)
 	uch.Position = UDim2.new(1, -10, 0.5, 0)
-	conn(ucard.MouseEnter, function() tween(ucard, { BackgroundTransparency = 0.3 }, 0.12) end)
+	conn(ucard.MouseEnter, function() tween(ucard, { BackgroundTransparency = 0.94 }, 0.12) end)
 	conn(ucard.MouseLeave, function() tween(ucard, { BackgroundTransparency = 1 }, 0.12) end)
 
 	local content = new("Frame", { Position = UDim2.fromOffset(172, 0), Size = UDim2.new(1, -172, 1, 0), BackgroundTransparency = 1 }, root)
@@ -1080,9 +1014,48 @@ function Library:CreateWindow(cfg)
 	makeDraggable(top, root)
 	makeDraggable(logoRow, root)
 
+	local close = button(top, { AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -12, 0, 14), Size = UDim2.fromOffset(30, 30), BackgroundTransparency = 1, ZIndex = 20 })
+	reg(close, "BackgroundColor3", "Hover")
+	corner(close, 7)
+	for _, r in ipairs({ 45, -45 }) do
+		local ln = new("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(12, 1.6), Rotation = r, BorderSizePixel = 0, ZIndex = 21 }, close)
+		reg(ln, "BackgroundColor3", "SubText")
+	end
+	conn(close.MouseEnter, function() tween(close, { BackgroundTransparency = 0.92 }, 0.1) end)
+	conn(close.MouseLeave, function() tween(close, { BackgroundTransparency = 1 }, 0.1) end)
+	conn(close.MouseButton1Click, function()
+		Library:Toggle(false)
+		Library:Notify({ Title = cfg.Title or "Dexori", Description = "menu hidden. Press " .. (Settings.MenuKey or "Insert") .. " to open it.", Time = 3 })
+	end)
+	local grip = button(root, { AnchorPoint = Vector2.new(1, 1), Position = UDim2.new(1, -4, 1, -4), Size = UDim2.fromOffset(18, 18), ZIndex = 30 })
+	for k = 1, 3 do
+		local dot = new("Frame", { AnchorPoint = Vector2.new(1, 1), Size = UDim2.fromOffset(3, 3), BorderSizePixel = 0, ZIndex = 31 }, grip)
+		dot.Position = UDim2.new(1, -(k - 1) * 5, 1, 0)
+		reg(dot, "BackgroundColor3", "Muted")
+		corner(dot, 2)
+		if k > 1 then
+			local d2 = dot:Clone()
+			d2.Parent = grip
+			d2.Position = UDim2.new(1, 0, 1, -(k - 1) * 5)
+			reg(d2, "BackgroundColor3", "Muted")
+		end
+	end
+	local resizing, rStart, rSize = false, nil, nil
+	conn(grip.InputBegan, function(i)
+		if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+			resizing, rStart, rSize = true, i.Position, root.AbsoluteSize
+		end
+	end)
+	conn(UserInputService.InputChanged, function(i)
+		if resizing and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then
+			local d = i.Position - rStart
+			local vs = Gui.AbsoluteSize
+			root.Size = UDim2.fromOffset(math.clamp(rSize.X + d.X, cfg.MinWidth or 640, vs.X - 20), math.clamp(rSize.Y + d.Y, cfg.MinHeight or 440, vs.Y - 20))
+		end
+	end)
+	conn(UserInputService.InputEnded, function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then resizing = false end end)
 	local cfgSel = button(top, { Position = UDim2.fromOffset(14, 14), Size = UDim2.fromOffset(206, 30) })
 	reg(cfgSel, "BackgroundColor3", "Control")
-	cfgSel.BackgroundTransparency = 0.2
 	corner(cfgSel, 6)
 	stroke(cfgSel)
 	local cfgLab = text(cfgSel, "No config", 13, "Text", FONT, { Position = UDim2.fromOffset(10, 0), Size = UDim2.new(1, -30, 1, 0) })
@@ -1102,7 +1075,7 @@ function Library:CreateWindow(cfg)
 			reg(b, "BackgroundColor3", "Hover")
 			corner(b, 6)
 			text(b, n, 13, n == Library._currentConfig and "Accent" or "Text", FONT, { Position = UDim2.fromOffset(10, 0), Size = UDim2.new(1, -20, 1, 0) })
-			conn(b.MouseEnter, function() tween(b, { BackgroundTransparency = 0.4 }, 0.1) end)
+			conn(b.MouseEnter, function() tween(b, { BackgroundTransparency = 0.94 }, 0.1) end)
 			conn(b.MouseLeave, function() tween(b, { BackgroundTransparency = 1 }, 0.1) end)
 			conn(b.MouseButton1Click, function()
 				Library:LoadConfig(n)
@@ -1165,13 +1138,13 @@ function Library:CreateWindow(cfg)
 		local entry = { b = b, ic = ic, lab = lab, name = name }
 		local function paint()
 			local on = currentBtn == entry
-			b.BackgroundTransparency = on and 0 or 1
+			b.BackgroundTransparency = on and 0.93 or 1
 			lab.TextColor3 = on and col("Text") or col("SubText")
 			if ic:IsA("ImageLabel") then ic.ImageColor3 = on and col("Accent") or col("SubText") else ic.BackgroundColor3 = on and col("Accent") or col("Muted") end
 		end
 		entry.paint = paint
 		table.insert(Library._refresh, paint)
-		conn(b.MouseEnter, function() if currentBtn ~= entry then tween(b, { BackgroundTransparency = 0.5 }, 0.1) end end)
+		conn(b.MouseEnter, function() if currentBtn ~= entry then tween(b, { BackgroundTransparency = 0.955 }, 0.1) end end)
 		conn(b.MouseLeave, function() if currentBtn ~= entry then tween(b, { BackgroundTransparency = 1 }, 0.1) end end)
 		table.insert(win._nav, entry)
 		return entry
@@ -1255,47 +1228,12 @@ function Library:CreateWindow(cfg)
 	local menuKey = ps:AddKeyPicker("_UIMenuKey", { Text = "Menu Key", Default = Settings.MenuKey, Mode = "Toggle" })
 	menuKey.ChangedCallback = function(k) Settings.MenuKey = k and k.Name or "None" saveSettings() end
 	for i, kb in ipairs(Library.Keybinds) do if kb == menuKey then table.remove(Library.Keybinds, i) break end end
-	local style = ps:AddColorPicker("_UIAccent", { Text = "Style", Default = accent() })
-	style.Callback = function(c) Library:SetAccent(c) end
-	local avatarIn = ps:AddInput("_UIAvatar", { Text = "Profile Picture", Placeholder = "image id", Default = Settings.Avatar, Finished = true, Width = 110 })
-	avatarIn.Callback = function(v)
-		Settings.Avatar = v
-		saveSettings()
-		local img = avatarImage()
-		uav.Image, pav.Image = img, img
-		if Library._statsAvatar then Library._statsAvatar.Image = img end
-	end
-	local design = ps:AddDropdown("_UIDesign", { Text = "Design", Values = { "Default", "Compact" }, Default = Settings.Design, Width = 110 })
-	local function applyDesign()
-		local compact = Settings.Design == "Compact"
-		local sw = compact and 62 or 172
-		tween(side, { Size = UDim2.new(0, sw, 1, 0) }, 0.2)
-		tween(content, { Position = UDim2.fromOffset(sw, 0), Size = UDim2.new(1, -sw, 1, 0) }, 0.2)
-		logoTxt.Visible, badge.Visible = not compact, not compact
-		uname.Visible, usub.Visible, uch.Visible = not compact, not compact, not compact
-		for _, e in ipairs(win._nav) do
-			if e.header then e.header.Visible = not compact end
-			if e.lab then e.lab.Visible = not compact end
-		end
-	end
-	design.Callback = function(v) Settings.Design = v saveSettings() applyDesign() end
-	local glassT = ps:AddToggle("_UIGlass", { Text = "Glass", Default = Settings.Glass, Array = false })
-	glassT.Callback = function(v) Settings.Glass = v saveSettings() Library:ApplyTheme() end
-	local blurT = ps:AddToggle("_UIBlur", { Text = "Blur", Default = Settings.Blur, Array = false })
-	blurT.Callback = function(v) Settings.Blur = v saveSettings() blurOn(v and root.Visible) end
-	local dimT = ps:AddToggle("_UIDim", { Text = "Dark Background", Default = Settings.DarkBackground, Array = false })
-	dimT.Callback = function(v) Settings.DarkBackground = v saveSettings() tween(Dim, { BackgroundTransparency = (v and root.Visible) and 0.45 or 1 }, 0.2) end
-	local lightT = ps:AddToggle("_UILight", { Text = "Light Mode", Default = Settings.Light, Array = false })
-	lightT.Callback = function(v) Settings.Light = v saveSettings() Library:ApplyTheme() end
-	local snowT = ps:AddToggle("_UISnow", { Text = "Snow Effect", Default = Settings.Snow, Array = false })
-	snowT.Callback = function(v) Settings.Snow = v saveSettings() setSnow(v) end
 	conn(ucard.MouseButton1Click, function() openPopover(pop, ucard, "right") end)
 
 	function win:SetVisible(on)
 		root.Visible = on
+		if GlassDOF then GlassDOF.Enabled = on end
 		if on then scale.Scale = 0.97 tween(scale, { Scale = 1 }, 0.18) end
-		blurOn(on and Settings.Blur)
-		tween(Dim, { BackgroundTransparency = (on and Settings.DarkBackground) and 0.45 or 1 }, 0.2)
 		if not on then closePopover() end
 	end
 	function Library:Toggle(on) if on == nil then on = not root.Visible end win:SetVisible(on) end
@@ -1308,11 +1246,9 @@ function Library:CreateWindow(cfg)
 
 	Library._stats = buildStats()
 	Library.Watermark = Library._stats
-	Library.KeybindFrame = buildKeybinds()
+	Library.KeybindFrame = new("Frame", { Visible = false, Size = UDim2.fromOffset(0, 0), BackgroundTransparency = 1 }, Gui)
 	Library._array = buildArray()
 	Library._window = win
-	applyDesign()
-	setSnow(Settings.Snow)
 	if cfg.AutoShow == false then win:SetVisible(false) else win:SetVisible(true) end
 	Library:ApplyTheme()
 	return win
@@ -1386,7 +1322,7 @@ function Library:Unload()
 	self.Unloaded = true
 	for _, fn in ipairs(self._unload) do pcall(fn) end
 	for _, c in ipairs(self._signals) do pcall(function() c:Disconnect() end) end
-	if Blur then pcall(function() Blur:Destroy() end) end
+	if GlassDOF then pcall(function() GlassDOF:Destroy() end) end
 	pcall(function() Gui:Destroy() end)
 end
 
