@@ -603,55 +603,97 @@ function Library:CreateWindow(cfg)
 	do
 		local layer = Create("Frame", { Name = "Aurora", Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, ClipsDescendants = true, ZIndex = 10, Parent = main })
 		Create("UICorner", { CornerRadius = UDim.new(0, 14), Parent = layer })
-		local blobs = {}
-		for i, spec in ipairs({
-			{ size = 0.95, tr = 0.8, ax = 0.34, ay = 0.26, sx = 0.23, sy = 0.31, p = 0.0, cx = 0.30, cy = 0.78 },
-			{ size = 0.75, tr = 0.84, ax = 0.28, ay = 0.30, sx = 0.29, sy = 0.19, p = 2.1, cx = 0.78, cy = 0.35 },
-			{ size = 0.60, tr = 0.86, ax = 0.22, ay = 0.22, sx = 0.37, sy = 0.27, p = 4.2, cx = 0.55, cy = 0.95 },
-		}) do
-			local img = Create("ImageLabel", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.new(spec.size, 0, spec.size, 0), BackgroundTransparency = 1, Image = "rbxassetid://5028857084", ImageTransparency = spec.tr, ZIndex = 10, Parent = layer })
-			Create("UIAspectRatioConstraint", { AspectRatio = 1, DominantAxis = Enum.DominantAxis.Width, Parent = img })
-			self:AddToRegistry(img, { ImageColor3 = "Accent" })
-			blobs[i] = { img = img, s = spec }
-		end
 		local sheen = Create("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.new(0.22, 0, 2.4, 0), Position = UDim2.new(-0.3, 0, 0.5, 0), Rotation = 18, BackgroundColor3 = Color3.new(1, 1, 1), BackgroundTransparency = 0.955, BorderSizePixel = 0, ZIndex = 10, Parent = layer })
 		Create("UIGradient", { Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.5, 0), NumberSequenceKeypoint.new(1, 1) }), Parent = sheen })
-		local motes = {}
-		for i = 1, 18 do
-			local sz = math.random(2, 3)
-			local m = Create("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(sz, sz), BackgroundTransparency = 0.6, BorderSizePixel = 0, ZIndex = 10, Parent = layer })
-			Create("UICorner", { CornerRadius = UDim.new(1, 0), Parent = m })
-			if i % 3 == 0 then self:AddToRegistry(m, { BackgroundColor3 = "Accent" }) else m.BackgroundColor3 = Color3.new(1, 1, 1) end
-			motes[i] = { f = m, x = math.random(), y = math.random(), vy = math.random(12, 30) / 1000, sway = math.random(10, 30) / 1000, ph = math.random() * 6.28, tw = math.random(8, 16) / 10 }
+		local NODES, LINK, MOUSE_LINK = 26, 120, 150
+		local nodes, lines = {}, {}
+		for i = 1, NODES do
+			local f = Create("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(3, 3), BackgroundTransparency = 0.35, BorderSizePixel = 0, ZIndex = 10, Parent = layer })
+			Create("UICorner", { CornerRadius = UDim.new(1, 0), Parent = f })
+			self:AddToRegistry(f, { BackgroundColor3 = "Accent" })
+			local ang = math.random() * math.pi * 2
+			local spd = math.random(8, 18)
+			nodes[i] = { f = f, x = math.random() * 600, y = math.random() * 400, vx = math.cos(ang) * spd, vy = math.sin(ang) * spd, ph = math.random() * 6.28 }
 		end
+		local function lineAt(i)
+			local l = lines[i]
+			if not l then
+				l = Create("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), BorderSizePixel = 0, ZIndex = 10, Parent = layer })
+				lines[i] = l
+			end
+			return l
+		end
+		local function place(l, x1, y1, x2, y2, alpha, colour)
+			local dx, dy = x2 - x1, y2 - y1
+			l.Position = UDim2.fromOffset((x1 + x2) * 0.5, (y1 + y2) * 0.5)
+			l.Size = UDim2.fromOffset(math.sqrt(dx * dx + dy * dy), 1)
+			l.Rotation = math.deg(math.atan2(dy, dx))
+			l.BackgroundColor3 = colour
+			l.BackgroundTransparency = alpha
+			l.Visible = true
+		end
+		local GuiService = game:GetService("GuiService")
 		local t, sweep = 0, 0
 		self:GiveSignal(RunService.RenderStepped:Connect(LPH_NO_VIRTUALIZE(function(dt)
 			if Library.Unloaded or not main.Visible then return end
 			t = t + dt
-			for _, b in ipairs(blobs) do
-				local sp = b.s
-				local x = sp.cx + sp.ax * math.sin(t * sp.sx + sp.p)
-				local y = sp.cy + sp.ay * math.cos(t * sp.sy + sp.p * 0.7)
-				local k = 1 + 0.08 * math.sin(t * 0.6 + sp.p)
-				b.img.Position = UDim2.new(x, 0, y, 0)
-				b.img.Size = UDim2.new(sp.size * k, 0, sp.size * k, 0)
+			local size = layer.AbsoluteSize
+			local W, H = math.max(size.X, 1), math.max(size.Y, 1)
+			local m = UserInputService:GetMouseLocation()
+			if not ScreenGui.IgnoreGuiInset then m = m - GuiService:GetGuiInset() end
+			m = m - layer.AbsolutePosition
+			local mouseIn = m.X >= 0 and m.Y >= 0 and m.X <= W and m.Y <= H
+			local accent = Library.Theme.Accent
+			for _, n in ipairs(nodes) do
+				if mouseIn then
+					local dx, dy = m.X - n.x, m.Y - n.y
+					local d = math.sqrt(dx * dx + dy * dy)
+					if d < MOUSE_LINK and d > 1 then
+						n.vx = n.vx + dx / d * 14 * dt
+						n.vy = n.vy + dy / d * 14 * dt
+					end
+				end
+				local sp = math.sqrt(n.vx * n.vx + n.vy * n.vy)
+				if sp > 22 then n.vx, n.vy = n.vx / sp * 22, n.vy / sp * 22 end
+				n.x = n.x + n.vx * dt
+				n.y = n.y + n.vy * dt
+				if n.x < 0 then n.x, n.vx = 0, math.abs(n.vx) elseif n.x > W then n.x, n.vx = W, -math.abs(n.vx) end
+				if n.y < 0 then n.y, n.vy = 0, math.abs(n.vy) elseif n.y > H then n.y, n.vy = H, -math.abs(n.vy) end
+				n.f.Position = UDim2.fromOffset(n.x, n.y)
+				n.f.BackgroundTransparency = 0.25 + 0.3 * (0.5 + 0.5 * math.sin(t * 1.3 + n.ph))
 			end
+			local used = 0
+			for i = 1, NODES do
+				local a = nodes[i]
+				for j = i + 1, NODES do
+					local b = nodes[j]
+					local dx, dy = b.x - a.x, b.y - a.y
+					local d2 = dx * dx + dy * dy
+					if d2 < LINK * LINK then
+						used = used + 1
+						place(lineAt(used), a.x, a.y, b.x, b.y, 0.72 + 0.28 * (math.sqrt(d2) / LINK), accent)
+					end
+				end
+				if mouseIn then
+					local dx, dy = m.X - a.x, m.Y - a.y
+					local d = math.sqrt(dx * dx + dy * dy)
+					if d < MOUSE_LINK then
+						used = used + 1
+						place(lineAt(used), a.x, a.y, m.X, m.Y, 0.55 + 0.45 * (d / MOUSE_LINK), Color3.new(1, 1, 1))
+					end
+				end
+			end
+			for i = used + 1, #lines do lines[i].Visible = false end
 			sweep = sweep + dt
-			local cycle = 7
+			local cycle = 5
 			local u = (sweep % cycle) / cycle
-			if u < 0.35 then
-				local e = u / 0.35
+			if u < 0.36 then
+				local e = u / 0.36
 				e = e * e * (3 - 2 * e)
 				sheen.Position = UDim2.new(-0.3 + 1.6 * e, 0, 0.5, 0)
 				sheen.Visible = true
 			else
 				sheen.Visible = false
-			end
-			for _, m in ipairs(motes) do
-				m.y = m.y - m.vy * dt
-				if m.y < -0.05 then m.y, m.x = 1.05, math.random() end
-				m.f.Position = UDim2.new(m.x + m.sway * math.sin(t * 0.9 + m.ph), 0, m.y, 0)
-				m.f.BackgroundTransparency = 0.55 + 0.35 * (0.5 + 0.5 * math.sin(t * m.tw + m.ph))
 			end
 		end)))
 	end
