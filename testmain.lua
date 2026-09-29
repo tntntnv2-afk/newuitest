@@ -4,7 +4,6 @@ local TweenService = cloneref(game:GetService("TweenService"))
 local UserInputService = cloneref(game:GetService("UserInputService"))
 local RunService = cloneref(game:GetService("RunService"))
 local HttpService = cloneref(game:GetService("HttpService"))
-local Lighting = cloneref(game:GetService("Lighting"))
 local LocalPlayer = Players.LocalPlayer
 
 local Library = {
@@ -20,12 +19,12 @@ local Settings = { Accent = { 214, 40, 48 }, MenuKey = "Insert" }
 Library.Settings = Settings
 
 local Palette = {
-	Window = Color3.fromRGB(9, 9, 12), Sidebar = Color3.fromRGB(255, 255, 255), Card = Color3.fromRGB(255, 255, 255),
+	Window = Color3.fromRGB(14, 14, 17), Sidebar = Color3.fromRGB(255, 255, 255), Card = Color3.fromRGB(255, 255, 255),
 	Control = Color3.fromRGB(255, 255, 255), Hover = Color3.fromRGB(255, 255, 255), Stroke = Color3.fromRGB(255, 255, 255),
-	Popover = Color3.fromRGB(17, 17, 21), Switch = Color3.fromRGB(62, 62, 70), Knob = Color3.fromRGB(165, 165, 175),
+	Popover = Color3.fromRGB(18, 18, 22), Switch = Color3.fromRGB(62, 62, 70), Knob = Color3.fromRGB(165, 165, 175),
 	Text = Color3.fromRGB(238, 238, 242), SubText = Color3.fromRGB(158, 158, 168), Muted = Color3.fromRGB(104, 104, 116),
 }
-local Alpha = { Window = 0.3, Sidebar = 0.965, Card = 0.968, Control = 0.935, Hover = 0.93, Stroke = 0.915, Popover = 0.16 }
+local Alpha = { Window = 0.1, Sidebar = 0.972, Card = 0.972, Control = 0.945, Hover = 0.94, Stroke = 0.92, Popover = 0.04 }
 local function F(weight) return Font.new("rbxasset://fonts/families/BuilderSans.json", weight or Enum.FontWeight.Regular) end
 local FONT, FONT_M, FONT_SB, FONT_B = F(), F(Enum.FontWeight.Medium), F(Enum.FontWeight.SemiBold), F(Enum.FontWeight.Bold)
 
@@ -150,30 +149,27 @@ Library.ScreenGui = Gui
 local Overlay = new("Frame", { Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, ZIndex = 200 }, Gui)
 local Catcher = button(Overlay, { Size = UDim2.fromScale(1, 1), Visible = false, ZIndex = 200 })
 
-local GlassDOF = nil
-local function glassBehind(frame, inset, isOn)
-	if not GlassDOF then
-		GlassDOF = new("DepthOfFieldEffect", { Name = "DexoriGlass", FarIntensity = 0, FocusDistance = 51.6, InFocusRadius = 50, NearIntensity = 1, Enabled = false }, Lighting)
+local function dropShadow(target, spread)
+	local sh = new("Frame", { BackgroundTransparency = 1, ZIndex = math.max((target.ZIndex or 1) - 1, 1) }, target.Parent)
+	local layers = {}
+	for i = 1, 4 do
+		local l = new("Frame", { BackgroundColor3 = Color3.new(0, 0, 0), BackgroundTransparency = 0.82 + i * 0.04, BorderSizePixel = 0, ZIndex = sh.ZIndex }, sh)
+		corner(l, 12 + i * 2)
+		layers[i] = { l, i * (spread or 3) }
 	end
-	local part = new("Part", { Name = "DexoriGlass", Color = Color3.new(0, 0, 0), Material = Enum.Material.Glass, Size = Vector3.new(1, 1, 0), Anchored = true, CanCollide = false, CanQuery = false, CanTouch = false, CastShadow = false, Transparency = 1 })
-	local mesh = new("SpecialMesh", { MeshType = Enum.MeshType.Brick, Offset = Vector3.new(0, 0, -0.000001) }, part)
-	conn(RunService.RenderStepped, function()
-		local cam = workspace.CurrentCamera
-		local show = cam and frame.Parent and frame.Visible and (isOn == nil or isOn()) and not Library.Unloaded
-		if not show then part.Transparency = 1 return end
-		if part.Parent ~= cam then part.Parent = cam end
-		local pos, size = frame.AbsolutePosition, frame.AbsoluteSize
-		local i = inset or 0
-		local function at(x, y) local r = cam:ViewportPointToRay(x, y) return r.Origin + r.Direction * 0.001 end
-		local tl = at(pos.X + i, pos.Y + i)
-		local tr = at(pos.X + size.X - i, pos.Y + i)
-		local br = at(pos.X + size.X - i, pos.Y + size.Y - i)
-		part.CFrame = CFrame.fromMatrix((tl + br) / 2, cam.CFrame.XVector, cam.CFrame.YVector, cam.CFrame.ZVector)
-		mesh.Scale = Vector3.new((tr - tl).Magnitude, (br - tr).Magnitude, 0)
-		part.Transparency = 0.98
-	end)
-	Library:OnUnload(function() part:Destroy() end)
-	return part
+	local function sync()
+		sh.Visible = target.Visible and target.Parent ~= nil
+		local p, z = target.AbsolutePosition, target.AbsoluteSize
+		for _, e in ipairs(layers) do
+			e[1].Position = UDim2.fromOffset(p.X - e[2], p.Y - e[2] + 4)
+			e[1].Size = UDim2.fromOffset(z.X + e[2] * 2, z.Y + e[2] * 2)
+		end
+	end
+	conn(target:GetPropertyChangedSignal("AbsolutePosition"), sync)
+	conn(target:GetPropertyChangedSignal("AbsoluteSize"), sync)
+	conn(target:GetPropertyChangedSignal("Visible"), sync)
+	task.defer(sync)
+	return sh
 end
 local function closePopover()
 	local p = Library._popover
@@ -213,7 +209,8 @@ local function makePopover(width)
 	stroke(p)
 	pad(p, 6)
 	list(p, 0)
-	glassBehind(p, 3, function() return p.Visible and p.GroupTransparency < 0.95 end)
+	new("UIGradient", { Rotation = 90, Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(1, 0.08) }) }, p)
+	dropShadow(p, 3)
 	return p
 end
 
@@ -363,15 +360,12 @@ function Section:AddSlider(idx, cfg)
 	reg(track, "BackgroundColor3", "Control")
 	corner(track, 3)
 	stroke(track)
-	local fill = new("Frame", { Size = UDim2.fromScale(0, 1), BorderSizePixel = 0, ZIndex = 4 }, track)
-	reg(fill, "BackgroundColor3", "Accent")
+	local fill = new("Frame", { Size = UDim2.fromScale(0, 1), BackgroundColor3 = Color3.new(0, 0, 0), BorderSizePixel = 0, ZIndex = 4 }, track)
 	corner(fill, 3)
-	local fglow = new("UIStroke", { Thickness = 2, Transparency = 0.75 }, fill)
-	reg(fglow, "Color", "Accent")
+	new("UIStroke", { Thickness = 1, Color = Color3.new(1, 1, 1), Transparency = 0.85 }, fill)
 	local knob = new("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(10, 10), Position = UDim2.fromScale(0, 0.5), BackgroundColor3 = Color3.new(1, 1, 1), BorderSizePixel = 0, ZIndex = 6 }, track)
 	corner(knob, 7)
-	local kr = new("UIStroke", { Thickness = 2, Transparency = 0.35 }, knob)
-	reg(kr, "Color", "Accent")
+	new("UIStroke", { Thickness = 2, Color = Color3.new(0, 0, 0), Transparency = 0.3 }, knob)
 	local function fmt(v)
 		if o.Rounding <= 0 then return tostring(math.floor(v + 0.5)) end
 		return string.format("%." .. o.Rounding .. "f", v)
@@ -1142,26 +1136,24 @@ function Library:CreateWindow(cfg)
 	new("UIGradient", { Rotation = 90, Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(1, 0.12) }) }, root)
 	local sheen = new("Frame", { Size = UDim2.new(1, 0, 0, 1), Position = UDim2.fromOffset(0, 1), BackgroundColor3 = Color3.new(1, 1, 1), BackgroundTransparency = 0.86, BorderSizePixel = 0, ZIndex = 11 }, root)
 	new("UIGradient", { Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.5, 0), NumberSequenceKeypoint.new(1, 1) }) }, sheen)
-	glassBehind(root, 4, function() return root.Visible end)
+	dropShadow(root, 5)
 
 	local side = new("Frame", { Size = UDim2.new(0, 172, 1, 0), BorderSizePixel = 0 }, root)
 	reg(side, "BackgroundColor3", "Sidebar")
 	local sline = new("Frame", { AnchorPoint = Vector2.new(1, 0), Position = UDim2.fromScale(1, 0), Size = UDim2.new(0, 1, 1, 0), BorderSizePixel = 0 }, side)
 	reg(sline, "BackgroundColor3", "Stroke")
-	local nav = new("ScrollingFrame", { Position = UDim2.fromOffset(0, 12), Size = UDim2.new(1, 0, 1, -12 - 76), BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 0, CanvasSize = UDim2.new(), AutomaticCanvasSize = Enum.AutomaticSize.Y }, side)
+	local nav = new("ScrollingFrame", { Position = UDim2.fromOffset(0, 12), Size = UDim2.new(1, 0, 1, -12 - 104), BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 0, CanvasSize = UDim2.new(), AutomaticCanvasSize = Enum.AutomaticSize.Y }, side)
 	list(nav, 3)
 	pad(nav, 0, 10, 0, 10)
 
-	local ucard = button(side, { AnchorPoint = Vector2.new(0, 1), Position = UDim2.new(0, 8, 1, -10), Size = UDim2.new(1, -16, 0, 56) })
+	local ucard = button(side, { AnchorPoint = Vector2.new(0, 1), Position = UDim2.new(0, 8, 1, -48), Size = UDim2.new(1, -16, 0, 44) })
 	reg(ucard, "BackgroundColor3", "Hover")
 	ucard.BackgroundTransparency = 1
 	corner(ucard, 8)
-	local uline = new("Frame", { Position = UDim2.new(0, 8, 1, -76), Size = UDim2.new(1, -16, 0, 1), BorderSizePixel = 0 }, side)
+	local uline = new("Frame", { Position = UDim2.new(0, 8, 1, -100), Size = UDim2.new(1, -16, 0, 1), BorderSizePixel = 0 }, side)
 	reg(uline, "BackgroundColor3", "Stroke")
-	local uav = new("ImageLabel", { Position = UDim2.fromOffset(8, 10), Size = UDim2.fromOffset(36, 36), BackgroundTransparency = 1, Image = avatarImage() }, ucard)
-	corner(uav, 18)
-	text(ucard, LocalPlayer.DisplayName, 13, "Text", FONT_M, { Position = UDim2.fromOffset(54, 11), Size = UDim2.new(1, -80, 0, 17) })
-	text(ucard, cfg.UserSubtitle or "Lifetime", 12, "SubText", FONT, { Position = UDim2.fromOffset(54, 28), Size = UDim2.new(1, -80, 0, 15) })
+	local uav = new("ImageLabel", { Position = UDim2.fromOffset(6, 6), Size = UDim2.fromOffset(32, 32), BackgroundTransparency = 1, Image = avatarImage() }, ucard)
+	corner(uav, 16)
 	local uch = chevron(ucard, "right", 9)
 	uch.AnchorPoint = Vector2.new(1, 0.5)
 	uch.Position = UDim2.new(1, -10, 0.5, 0)
@@ -1177,40 +1169,29 @@ function Library:CreateWindow(cfg)
 	local _c = crumb
 	makeDraggable(top, root)
 
-	local header = new("CanvasGroup", { Size = UDim2.fromOffset(W, 36), ZIndex = 10 }, Gui)
-	reg(header, "BackgroundColor3", "Window")
-	corner(header, 10)
-	stroke(header, "Stroke", 0.88)
-	glassBehind(header, 3, function() return root.Visible end)
-	pad(header, 0, 14, 0, 10)
+	local header = new("Frame", { Position = UDim2.fromOffset(14, 0), Size = UDim2.new(1, -70, 1, 0), BackgroundTransparency = 1 }, top)
 	local hl = list(header, 12, Enum.FillDirection.Horizontal)
 	hl.VerticalAlignment = Enum.VerticalAlignment.Center
-	new("ImageLabel", { Size = UDim2.fromOffset(20, 20), BackgroundTransparency = 1, Image = cfg.Logo or "rbxassetid://83607561451748", LayoutOrder = 0 }, header)
+	new("ImageLabel", { Size = UDim2.fromOffset(22, 22), BackgroundTransparency = 1, Image = cfg.Logo or "rbxassetid://83607561451748", LayoutOrder = 0 }, header)
 	local function stat(order, unit)
-		local seg = new("Frame", { Size = UDim2.fromOffset(0, 36), AutomaticSize = Enum.AutomaticSize.X, BackgroundTransparency = 1, LayoutOrder = order }, header)
+		local seg = new("Frame", { Size = UDim2.fromOffset(0, 58), AutomaticSize = Enum.AutomaticSize.X, BackgroundTransparency = 1, LayoutOrder = order }, header)
 		local sl = list(seg, 4, Enum.FillDirection.Horizontal)
 		sl.VerticalAlignment = Enum.VerticalAlignment.Center
-		local v = text(seg, "", 12, "Text", FONT_B, { Size = UDim2.fromOffset(0, 36), AutomaticSize = Enum.AutomaticSize.X, LayoutOrder = 1 })
-		if unit then text(seg, unit, 12, "SubText", FONT_M, { Size = UDim2.fromOffset(0, 36), AutomaticSize = Enum.AutomaticSize.X, LayoutOrder = 2 }) end
+		local v = text(seg, "", 12, "Text", FONT_B, { Size = UDim2.fromOffset(0, 58), AutomaticSize = Enum.AutomaticSize.X, LayoutOrder = 1 })
+		if unit then text(seg, unit, 12, "SubText", FONT_M, { Size = UDim2.fromOffset(0, 58), AutomaticSize = Enum.AutomaticSize.X, LayoutOrder = 2 }) end
 		local sep = new("Frame", { Size = UDim2.fromOffset(1, 12), BorderSizePixel = 0, LayoutOrder = order + 0.5 }, header)
 		reg(sep, "BackgroundColor3", "Stroke")
 		sep.BackgroundTransparency = 0.85
-		return v, sep
+		return v
 	end
 	local fpsV = stat(1, "FPS")
 	local msV = stat(2, "MS")
 	local tV = stat(3)
 	local locV = stat(4)
-	local userV, lastSep = stat(5)
-	lastSep.Visible = false
-	userV.Text = LocalPlayer.DisplayName
-	local hav = new("ImageLabel", { Size = UDim2.fromOffset(20, 20), BackgroundTransparency = 1, Image = avatarImage(), LayoutOrder = 6 }, header)
-	corner(hav, 10)
+	local hav = new("ImageLabel", { Size = UDim2.fromOffset(22, 22), BackgroundTransparency = 1, Image = avatarImage(), LayoutOrder = 6 }, header)
+	corner(hav, 11)
 	local frames, acc = 0, 0
 	conn(RunService.RenderStepped, function(dt)
-		header.Visible = root.Visible
-		header.Position = root.Position - UDim2.fromOffset(0, 44)
-		header.Size = UDim2.fromOffset(root.AbsoluteSize.X, 36)
 		frames, acc = frames + 1, acc + dt
 		if acc >= 0.5 then
 			fpsV.Text = tostring(math.floor(frames / acc + 0.5))
@@ -1226,17 +1207,17 @@ function Library:CreateWindow(cfg)
 		local ok, cc = pcall(function() return game:GetService("LocalizationService"):GetCountryRegionForPlayerAsync(LocalPlayer) end)
 		locV.Text = ok and cc or "--"
 	end)
-	makeDraggable(header, root)
 	Library.Watermark = header
 
 	local function confirm(title, desc, onYes)
 		local shade = button(root, { Size = UDim2.fromScale(1, 1), BackgroundColor3 = Color3.new(0, 0, 0), BackgroundTransparency = 1, ZIndex = 60 })
 		tween(shade, { BackgroundTransparency = 0.45 }, 0.15)
-		local box = new("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(300, 132), ZIndex = 61 }, shade)
+		local box = new("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(300, 132), ZIndex = 62 }, shade)
 		reg(box, "BackgroundColor3", "Popover")
-		box.BackgroundTransparency = 0.04
 		corner(box, 10)
-		stroke(box)
+		stroke(box, "Stroke", 0.86)
+		new("UIGradient", { Rotation = 90, Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(1, 0.08) }) }, box)
+		dropShadow(box, 3)
 		text(box, title, 14, "Text", FONT_SB, { Position = UDim2.fromOffset(16, 14), Size = UDim2.new(1, -32, 0, 18), ZIndex = 62 })
 		text(box, desc, 12, "SubText", FONT, { Position = UDim2.fromOffset(16, 36), Size = UDim2.new(1, -32, 0, 40), TextWrapped = true, TextTruncate = Enum.TextTruncate.None, TextYAlignment = Enum.TextYAlignment.Top, ZIndex = 62 })
 		local function close2() tween(shade, { BackgroundTransparency = 1 }, 0.12) task.delay(0.12, function() shade:Destroy() end) end
@@ -1287,7 +1268,7 @@ function Library:CreateWindow(cfg)
 		end
 	end)
 	conn(UserInputService.InputEnded, function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then resizing = false end end)
-	local cfgSel = button(top, { Position = UDim2.fromOffset(14, 14), Size = UDim2.fromOffset(206, 30) })
+	local cfgSel = button(side, { AnchorPoint = Vector2.new(0, 1), Position = UDim2.new(0, 8, 1, -10), Size = UDim2.new(1, -16, 0, 32) })
 	reg(cfgSel, "BackgroundColor3", "Control")
 	corner(cfgSel, 6)
 	stroke(cfgSel)
@@ -1372,7 +1353,7 @@ function Library:CreateWindow(cfg)
 		if #names == 0 then text(cfgList, "no configs yet", 12, "Muted", FONT, { Size = UDim2.new(1, 0, 0, 26), Position = UDim2.fromOffset(6, 0), TextXAlignment = Enum.TextXAlignment.Center }) end
 		cfgList.Size = UDim2.new(1, 0, 0, math.min(math.max(#names, 1) * 30, 180))
 	end
-	conn(cfgSel.MouseButton1Click, function() refreshCfgList() openPopover(cfgPop, cfgSel, "below") end)
+	conn(cfgSel.MouseButton1Click, function() refreshCfgList() openPopover(cfgPop, cfgSel, "right") end)
 	Library._setConfigLabel = function(n) cfgLab.Text = n or "No config" end
 
 	local current, currentBtn = nil, nil
@@ -1490,8 +1471,6 @@ function Library:CreateWindow(cfg)
 	local ph = new("Frame", { Size = UDim2.new(1, 0, 0, 56), BackgroundTransparency = 1, LayoutOrder = 0 }, pop)
 	local pav = new("ImageLabel", { Position = UDim2.fromOffset(6, 10), Size = UDim2.fromOffset(36, 36), BackgroundTransparency = 1, Image = avatarImage() }, ph)
 	corner(pav, 18)
-	text(ph, LocalPlayer.DisplayName, 13, "Text", FONT_M, { Position = UDim2.fromOffset(52, 11), Size = UDim2.new(1, -60, 0, 17) })
-	text(ph, cfg.UserSubtitle or "Lifetime", 12, "SubText", FONT, { Position = UDim2.fromOffset(52, 28), Size = UDim2.new(1, -60, 0, 15) })
 	local pline = new("Frame", { Size = UDim2.new(1, 0, 0, 1), BorderSizePixel = 0, LayoutOrder = 1 }, pop)
 	reg(pline, "BackgroundColor3", "Stroke")
 	local ps = setmetatable({ Body = new("Frame", { Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, LayoutOrder = 2 }, pop), _rows = 0, _flat = true }, Section)
@@ -1503,7 +1482,6 @@ function Library:CreateWindow(cfg)
 
 	function win:SetVisible(on)
 		root.Visible = on
-		if GlassDOF then GlassDOF.Enabled = on end
 		if on then scale.Scale = 0.97 tween(scale, { Scale = 1 }, 0.18) end
 		if not on then closePopover() end
 	end
@@ -1591,7 +1569,7 @@ function Library:Unload()
 	self.Unloaded = true
 	for _, fn in ipairs(self._unload) do pcall(fn) end
 	for _, c in ipairs(self._signals) do pcall(function() c:Disconnect() end) end
-	if GlassDOF then pcall(function() GlassDOF:Destroy() end) end
+
 	pcall(function() Gui:Destroy() end)
 end
 
