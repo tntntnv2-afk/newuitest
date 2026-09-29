@@ -1,4 +1,3 @@
-local SaveManager
 if not LPH_OBFUSCATED then
 	LPH_NO_VIRTUALIZE = function(f) return f end
 end
@@ -601,18 +600,61 @@ function Library:CreateWindow(cfg)
 	end
 	window.Frame = main
 
-	local ember = Create("Frame", { AnchorPoint = Vector2.new(0.5, 1), Size = UDim2.new(1.2, 0, 0.55, 0), Position = UDim2.new(0.5, 0, 1, 40), BackgroundTransparency = 0.93, BorderSizePixel = 0, ZIndex = 10, Parent = main })
-	Create("UICorner", { CornerRadius = UDim.new(1, 0), Parent = ember })
-	self:AddToRegistry(ember, { BackgroundColor3 = "Accent" })
-	Create("UIGradient", { Rotation = 90, Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.45, 0.55), NumberSequenceKeypoint.new(1, 0.15) }), Parent = ember })
-	task.spawn(LPH_NO_VIRTUALIZE(function()
-		local t = 0
-		while not Library.Unloaded and ember.Parent do
-			t = t + task.wait(0.05)
-			ember.BackgroundTransparency = 0.93 + 0.02 * math.sin(t * 0.7)
-			ember.Position = UDim2.new(0.5 + 0.03 * math.sin(t * 0.25), 0, 1, 40)
+	do
+		local layer = Create("Frame", { Name = "Aurora", Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, ClipsDescendants = true, ZIndex = 10, Parent = main })
+		Create("UICorner", { CornerRadius = UDim.new(0, 14), Parent = layer })
+		local blobs = {}
+		for i, spec in ipairs({
+			{ size = 0.95, tr = 0.8, ax = 0.34, ay = 0.26, sx = 0.23, sy = 0.31, p = 0.0, cx = 0.30, cy = 0.78 },
+			{ size = 0.75, tr = 0.84, ax = 0.28, ay = 0.30, sx = 0.29, sy = 0.19, p = 2.1, cx = 0.78, cy = 0.35 },
+			{ size = 0.60, tr = 0.86, ax = 0.22, ay = 0.22, sx = 0.37, sy = 0.27, p = 4.2, cx = 0.55, cy = 0.95 },
+		}) do
+			local img = Create("ImageLabel", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.new(spec.size, 0, spec.size, 0), BackgroundTransparency = 1, Image = "rbxassetid://5028857084", ImageTransparency = spec.tr, ZIndex = 10, Parent = layer })
+			Create("UIAspectRatioConstraint", { AspectRatio = 1, DominantAxis = Enum.DominantAxis.Width, Parent = img })
+			self:AddToRegistry(img, { ImageColor3 = "Accent" })
+			blobs[i] = { img = img, s = spec }
 		end
-	end))
+		local sheen = Create("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.new(0.22, 0, 2.4, 0), Position = UDim2.new(-0.3, 0, 0.5, 0), Rotation = 18, BackgroundColor3 = Color3.new(1, 1, 1), BackgroundTransparency = 0.955, BorderSizePixel = 0, ZIndex = 10, Parent = layer })
+		Create("UIGradient", { Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.5, 0), NumberSequenceKeypoint.new(1, 1) }), Parent = sheen })
+		local motes = {}
+		for i = 1, 18 do
+			local sz = math.random(2, 3)
+			local m = Create("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(sz, sz), BackgroundTransparency = 0.6, BorderSizePixel = 0, ZIndex = 10, Parent = layer })
+			Create("UICorner", { CornerRadius = UDim.new(1, 0), Parent = m })
+			if i % 3 == 0 then self:AddToRegistry(m, { BackgroundColor3 = "Accent" }) else m.BackgroundColor3 = Color3.new(1, 1, 1) end
+			motes[i] = { f = m, x = math.random(), y = math.random(), vy = math.random(12, 30) / 1000, sway = math.random(10, 30) / 1000, ph = math.random() * 6.28, tw = math.random(8, 16) / 10 }
+		end
+		local t, sweep = 0, 0
+		self:GiveSignal(RunService.RenderStepped:Connect(LPH_NO_VIRTUALIZE(function(dt)
+			if Library.Unloaded or not main.Visible then return end
+			t = t + dt
+			for _, b in ipairs(blobs) do
+				local sp = b.s
+				local x = sp.cx + sp.ax * math.sin(t * sp.sx + sp.p)
+				local y = sp.cy + sp.ay * math.cos(t * sp.sy + sp.p * 0.7)
+				local k = 1 + 0.08 * math.sin(t * 0.6 + sp.p)
+				b.img.Position = UDim2.new(x, 0, y, 0)
+				b.img.Size = UDim2.new(sp.size * k, 0, sp.size * k, 0)
+			end
+			sweep = sweep + dt
+			local cycle = 7
+			local u = (sweep % cycle) / cycle
+			if u < 0.35 then
+				local e = u / 0.35
+				e = e * e * (3 - 2 * e)
+				sheen.Position = UDim2.new(-0.3 + 1.6 * e, 0, 0.5, 0)
+				sheen.Visible = true
+			else
+				sheen.Visible = false
+			end
+			for _, m in ipairs(motes) do
+				m.y = m.y - m.vy * dt
+				if m.y < -0.05 then m.y, m.x = 1.05, math.random() end
+				m.f.Position = UDim2.new(m.x + m.sway * math.sin(t * 0.9 + m.ph), 0, m.y, 0)
+				m.f.BackgroundTransparency = 0.55 + 0.35 * (0.5 + 0.5 * math.sin(t * m.tw + m.ph))
+			end
+		end)))
+	end
 
 	local RAIL, HEAD, FOOT = 150, 58, 28
 	local TAB_H, TAB_PAD, VISIBLE_TABS = 32, 2, 5
@@ -721,84 +763,9 @@ function Library:CreateWindow(cfg)
 		if y0 < cy then scrollTo(y0) elseif y0 + btn.AbsoluteSize.Y > cy + vh then scrollTo(y0 + btn.AbsoluteSize.Y - vh) end
 	end
 
-	local hintBtn = Create("TextButton", { AnchorPoint = Vector2.new(0, 1), Size = UDim2.new(1, -36, 0, 34), Position = UDim2.new(0, 24, 1, -46), Text = "", AutoButtonColor = false, Active = true, ZIndex = 30, Parent = rail })
+	local hintBtn = Create("TextButton", { AnchorPoint = Vector2.new(0, 1), Size = UDim2.new(1, -36, 0, 26), Position = UDim2.new(0, 24, 1, -14), Text = "", AutoButtonColor = false, Active = true, ZIndex = 30, Parent = rail })
 	Corner(hintBtn, 8); self:AddToRegistry(hintBtn, { BackgroundColor3 = "Element" }); Stroke(hintBtn, "Outline")
-	local hint = Text(hintBtn, "", 10, true, "FontDim"); hint.TextXAlignment = Enum.TextXAlignment.Left; hint.Position = UDim2.new(0, 38, 0, 0); hint.Size = UDim2.new(1, -44, 1, 0); hint.ZIndex = 31
-	do
-		local pav = Create("ImageLabel", { AnchorPoint = Vector2.new(0, 0.5), Size = UDim2.fromOffset(24, 24), Position = UDim2.new(0, 6, 0.5, 0), BackgroundTransparency = 1, ZIndex = 31, Parent = hintBtn, Image = "rbxthumb://type=AvatarHeadShot&id=" .. LocalPlayer.UserId .. "&w=150&h=150" })
-		Corner(pav, 12)
-	end
-	do
-		local cfgBtn = Create("TextButton", { AnchorPoint = Vector2.new(0, 1), Size = UDim2.new(1, -36, 0, 26), Position = UDim2.new(0, 24, 1, -14), Text = "", AutoButtonColor = false, ZIndex = 30, Parent = rail })
-		Corner(cfgBtn, 8); self:AddToRegistry(cfgBtn, { BackgroundColor3 = "Element" }); Stroke(cfgBtn, "Outline")
-		local cfgT = Text(cfgBtn, "no config", 10, true, "FontDim"); cfgT.Position = UDim2.new(0, 10, 0, 0); cfgT.Size = UDim2.new(1, -30, 1, 0); cfgT.ZIndex = 31
-		local cch = Chevron(cfgBtn, 10, "FontDim"); cch.AnchorPoint = Vector2.new(0.5, 0.5); cch.Position = UDim2.new(1, -13, 0.5, 0); cch.Rotation = -90; cch.ZIndex = 31
-		local pop, body = PopupShell(230, 70, 12, 8)
-		Library.OpenPopups[pop] = pop
-		local current = nil
-		local function rebuild()
-			pcall(function() if not SaveManager.Library then SaveManager:SetLibrary(Library) end end)
-			for _, c in ipairs(body:GetChildren()) do if not c:IsA("UIListLayout") and not c:IsA("UIPadding") then c:Destroy() end end
-			local head2 = Text(body, "configs", 12, true); head2.Size = UDim2.new(1, 0, 0, 22); head2.ZIndex = 72
-			local names = {}
-			pcall(function() names = SaveManager:ListConfigs() end)
-			for i, n in ipairs(names) do
-				local b = Create("TextButton", { Size = UDim2.new(1, 0, 0, 26), Text = "", AutoButtonColor = false, BackgroundTransparency = n == current and 0.9 or 1, BackgroundColor3 = Color3.new(1, 1, 1), LayoutOrder = i, ZIndex = 72, Parent = body })
-				Corner(b, 6)
-				local t = Text(b, n, 11, n == current, n == current and "Accent" or "FontDim"); t.Position = UDim2.new(0, 10, 0, 0); t.Size = UDim2.new(1, -20, 1, 0); t.ZIndex = 73
-				b.MouseEnter:Connect(function() if n ~= current then Tween(b, { BackgroundTransparency = 0.94 }, 0.1) end end)
-				b.MouseLeave:Connect(function() if n ~= current then Tween(b, { BackgroundTransparency = 1 }, 0.1) end end)
-				b.MouseButton1Click:Connect(function()
-					pcall(function() SaveManager:Load(n) end)
-					current = n
-					cfgT.Text = n
-					pop.Visible = false
-				end)
-			end
-			if #names == 0 then local e = Text(body, "no configs yet", 11, false, "FontDim"); e.Size = UDim2.new(1, 0, 0, 22); e.LayoutOrder = 1; e.ZIndex = 72 end
-			local nameBox = Create("TextBox", { Size = UDim2.new(1, 0, 0, 26), Text = current or "", PlaceholderText = "config name", ClearTextOnFocus = false, TextSize = 11, FontFace = Library.FontFace, TextXAlignment = Enum.TextXAlignment.Left, LayoutOrder = 500, ZIndex = 72, Parent = body })
-			Corner(nameBox, 6); self:AddToRegistry(nameBox, { BackgroundColor3 = "Element", TextColor3 = "Font", PlaceholderColor3 = "FontDim" }); Stroke(nameBox, "Outline")
-			Create("UIPadding", { PaddingLeft = UDim.new(0, 8), Parent = nameBox })
-			local row2 = Create("Frame", { Size = UDim2.new(1, 0, 0, 26), BackgroundTransparency = 1, LayoutOrder = 501, ZIndex = 72, Parent = body })
-			Create("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder, Parent = row2 })
-			for k, spec in ipairs({ "save", "autoload", "delete" }) do
-				local b = Create("TextButton", { Size = UDim2.new(1 / 3, -3, 1, 0), Text = spec, TextSize = 11, FontFace = Library.FontFaceBold or Library.FontFace, AutoButtonColor = false, LayoutOrder = k, ZIndex = 73, Parent = row2 })
-				Corner(b, 6); Stroke(b, "Outline")
-				self:AddToRegistry(b, { BackgroundColor3 = k == 1 and "Accent" or "Element", TextColor3 = "Font" })
-				local armed = false
-				b.MouseButton1Click:Connect(function()
-					local n = nameBox.Text ~= "" and nameBox.Text or current
-					if not n or n == "" then Library:Notify({ Title = "configs", Description = "type a name first", Time = 2 }) return end
-					if spec == "save" then pcall(function() SaveManager:Save(n) end) current = n cfgT.Text = n
-					elseif spec == "autoload" then pcall(function() SaveManager:SetAutoload(n) end) Library:Notify({ Title = "configs", Description = n .. " will load automatically", Time = 2 })
-					else
-						if not armed then armed = true b.Text = "sure?" task.delay(2, function() armed = false b.Text = "delete" end) return end
-						pcall(function() SaveManager:Delete(n) end)
-						if current == n then current = nil cfgT.Text = "no config" end
-					end
-					rebuild()
-				end)
-			end
-			task.defer(function()
-				local lay = body:FindFirstChildOfClass("UIListLayout")
-				pop.Size = UDim2.new(0, 230, 0, (lay and lay.AbsoluteContentSize.Y or 100) + 16)
-			end)
-		end
-		cfgBtn.MouseButton1Click:Connect(function()
-			if pop.Visible then pop.Visible = false return end
-			Library:_ClosePopups(pop)
-			rebuild()
-			local ap = cfgBtn.AbsolutePosition
-			pop.Position = UDim2.fromOffset(ap.X + cfgBtn.AbsoluteSize.X + 10, ap.Y - 180)
-			pop.Visible = true
-		end)
-		self:GiveSignal(UserInputService.InputBegan:Connect(function(inp)
-			if not pop.Visible or inp.UserInputType ~= Enum.UserInputType.MouseButton1 then return end
-			local m = UserInputService:GetMouseLocation() - game:GetService("GuiService"):GetGuiInset()
-			local function inside(g) local p, z = g.AbsolutePosition, g.AbsoluteSize return m.X >= p.X and m.X <= p.X + z.X and m.Y >= p.Y and m.Y <= p.Y + z.Y end
-			if not inside(pop) and not inside(cfgBtn) then pop.Visible = false end
-		end))
-	end
+	local hint = Text(hintBtn, "", 10, true, "FontDim"); hint.TextXAlignment = Enum.TextXAlignment.Center; hint.Size = UDim2.new(1, 0, 1, 0); hint.ZIndex = 31
 	local rebinding = false
 	local function keyShort(k)
 		local n = tostring(k and k.Name or "None")
@@ -839,7 +806,6 @@ function Library:CreateWindow(cfg)
 	do
 		local strip = Create("Frame", { Size = UDim2.new(1, -300, 0, 26), Position = UDim2.new(0, 20, 0, 16), BackgroundTransparency = 1, ZIndex = 13, Parent = head })
 		Create("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, VerticalAlignment = Enum.VerticalAlignment.Center, Padding = UDim.new(0, 10), SortOrder = Enum.SortOrder.LayoutOrder, Parent = strip })
-		Create("ImageLabel", { Size = UDim2.fromOffset(18, 18), BackgroundTransparency = 1, Image = cfg.Icon and ("rbxassetid://" .. tostring(cfg.Icon)) or Library.Icon, LayoutOrder = 0, ZIndex = 14, Parent = strip })
 		local function stat(n, unit)
 			local seg = Create("Frame", { Size = UDim2.new(0, 0, 1, 0), AutomaticSize = Enum.AutomaticSize.X, BackgroundTransparency = 1, LayoutOrder = n, ZIndex = 14, Parent = strip })
 			Create("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, VerticalAlignment = Enum.VerticalAlignment.Center, Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder, Parent = seg })
@@ -1012,16 +978,6 @@ function Library:CreateWindow(cfg)
 		return l, r, well
 	end
 
-	function window:AddCategory(name)
-		order = order + 1
-		local h = Text(railList, string.upper(name), 10, true, "FontDim")
-		h.Size = UDim2.new(1, -8, 0, 18)
-		h.Position = UDim2.new(0, 8, 0, 0)
-		h.LayoutOrder = order
-		h.ZIndex = 14
-		h.TextYAlignment = Enum.TextYAlignment.Bottom
-		return h
-	end
 	function window:AddTab(name, icon)
 		order = order + 1
 		local tab = { Name = name, Subtabs = {} }
@@ -2714,7 +2670,7 @@ return ThemeManager
 
 end)()
 
-SaveManager = (function()
+local SaveManager = (function()
 local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
